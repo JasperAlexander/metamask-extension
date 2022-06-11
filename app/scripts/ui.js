@@ -17,6 +17,8 @@ import {
   ENVIRONMENT_TYPE_POPUP,
 } from '../../shared/constants/app';
 import { isManifestV3 } from '../../shared/modules/mv3.utils';
+import { SUPPORT_LINK } from '../../ui/helpers/constants/common';
+import { getErrorHtml } from '../../ui/helpers/utils/error-utils';
 import ExtensionPlatform from './platforms/extension';
 import { setupMultiplex } from './lib/stream-utils';
 import { getEnvironmentType } from './lib/util';
@@ -39,6 +41,21 @@ if (isManifestV3()) {
 start().catch(log.error);
 
 async function start() {
+  async function displayCriticalError(err, metamaskState) {
+    const html = await getErrorHtml(SUPPORT_LINK, metamaskState);
+
+    container.innerHTML = html;
+
+    const button = document.getElementById('critical-error-button');
+
+    button.addEventListener('click', (_) => {
+      browser.runtime.reload();
+    });
+
+    log.error(err.stack);
+    throw err;
+  }
+
   // create platform global
   global.platform = new ExtensionPlatform();
 
@@ -94,18 +111,11 @@ async function start() {
     initializeUiWithTab(activeTab);
   }
 
-  function displayCriticalError(err) {
-    container.innerHTML =
-      '<div class="critical-error">The MetaMask app failed to load: please open and close MetaMask again to restart.</div>';
-    container.style.height = '80px';
-    log.error(err.stack);
-    throw err;
-  }
-
   function initializeUiWithTab(tab) {
     initializeUi(tab, connectionStream, (err, store) => {
       if (err) {
-        displayCriticalError(err);
+        // if there's an error, store will be = metamaskState
+        displayCriticalError(err, store);
         return;
       }
       isUIInitialised = true;
@@ -159,7 +169,7 @@ async function queryCurrentActiveTab(windowType) {
 function initializeUi(activeTab, connectionStream, cb) {
   connectToAccountManager(connectionStream, (err, backgroundConnection) => {
     if (err) {
-      cb(err);
+      cb(err, null);
       return;
     }
 
